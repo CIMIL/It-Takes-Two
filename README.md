@@ -1,14 +1,29 @@
 # It-Takes-Two
 
-Alberto Boem (University of Trento, Italy)
-Damian T. Dziwis (, Germany)
 
-Try the instruments here:
+## Dependencies
 
-Spatial Instrument (Damian T. Dziwis)
+The instruments are based on [PdXR](https://github.com/AudioGroupCologne/PdXR/tree/main).
 
-Sonification Instrument (Damian T. Dziwis, Sacha...)
+Run each of them in a [Networked-Aframe](https://github.com/networked-aframe/networked-aframe) instance.
 
-Body Instrument (Alberto Boem)
+## Run them directly on Glitch
 
-Based on PdXR, developed by Damian T. Dziwis and the Audio Group Cologne.
+[Spatial Instrument](https://spatial-instrument.glitch.me/)
+
+[Sonification Instrument](https://sonification-instrument.glitch.me/)
+
+[Body Instrument](https://body-instrument.glitch.me/)
+
+
+## Credits
+
+> Spatial Instrument by Damian T. Dziwis ()
+
+> Sonification Instrument by Sacha , and Damian T. Dziwis ()
+
+> Body Instrument by Alberto Boem ()
+
+Based on [PdXR](https://github.com/AudioGroupCologne/PdXR/tree/main), developed by Damian T. Dziwis and the [Audio Group Cologne](https://github.com/AudioGroupCologne).
+
+
