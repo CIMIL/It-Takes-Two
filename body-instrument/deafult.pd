@@ -1,0 +1,55 @@
+#N canvas 952 336 1459 1024 12;
+#X obj 195 41 r bng-s;
+#X obj 48 158 dac~;
+#X obj 199 199 -~ 0.25;
+#X obj 198 229 cos~;
+#X obj 200 171 *~ 20;
+#X obj 201 147 sqrt~;
+#X obj 197 254 lop~ 1000;
+#X obj 194 291 /~ 5;
+#X obj 202 118 line~;
+#X msg 202 89 0 \, 1 200;
+#X obj 567 31 tgl 19 0 bng-s bng-r empty 0 -10 0 12 -262144 -1 -1 0
+1;
+#X obj 568 66 vsl 19 162 0 127 0 0 vsl-s vsl-r empty 0 -9 0 12 -262144
+-1 -1 0 1;
+#X obj 298 117 r vsl-s;
+#X obj 395 85 phasor~;
+#X obj 398 213 *~;
+#X obj 418 161 line~;
+#X obj 604 67 vsl 15 128 0 127 0 0 svl-s svl-r empty 0 -9 0 10 -262144
+-1 -1 0 1;
+#X msg 474 117 1 100;
+#X msg 422 122 0 100;
+#X obj 470 171 del 100;
+#X obj 476 143 t b b;
+#X obj 464 201 t b b;
+#X obj 391 279 /~ 5;
+#X obj 394 246 lop~ 100;
+#X obj 606 35 tgl 15 0 bangz-s bangz-r empty 17 7 0 10 -262144 -1 -1
+0 1;
+#X obj 478 88 r bangz-s;
+#X obj 394 45 r svl-s;
+#X connect 0 0 9 0;
+#X connect 2 0 3 0;
+#X connect 3 0 6 0;
+#X connect 4 0 2 0;
+#X connect 5 0 4 0;
+#X connect 6 0 7 0;
+#X connect 7 0 1 0;
+#X connect 8 0 5 0;
+#X connect 9 0 8 0;
+#X connect 12 0 4 1;
+#X connect 13 0 14 0;
+#X connect 14 0 23 0;
+#X connect 15 0 14 1;
+#X connect 17 0 15 0;
+#X connect 17 0 20 0;
+#X connect 18 0 15 0;
+#X connect 19 0 21 0;
+#X connect 20 0 19 0;
+#X connect 21 0 18 0;
+#X connect 22 0 1 0;
+#X connect 23 0 22 0;
+#X connect 25 0 17 0;
+#X connect 26 0 13 0;

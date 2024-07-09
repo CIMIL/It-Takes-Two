@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Body Instrument</title>
+
+    <script src="https://aframe.io/releases/1.4.1/aframe.min.js"></script>
+    <script src="./aframe-super-keyboard/dist/aframe-super-keyboard.js"></script>
+
+    <!--   NAF basic requirements   -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.5.0/socket.io.slim.js"></script>
+    <script src="/easyrtc/easyrtc.js"></script>
+    <script src="/dist/networked-aframe.js"></script>
+
+    <!--    used for flying in this demo  -->
+    <!--  <script src="https://cdn.jsdelivr.net/gh/n5ro/aframe-extras@14411ea/dist/aframe-extras.controls.min.js"></script>
+-->
+    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
+
+    <!--   used for the pretty environment   -->
+    <script src="https://unpkg.com/aframe-environment-component@1.3.3/dist/aframe-environment-component.min.js"></script>
+
+    <!--   used to prevent players from spawning on top of each other so much  -->
+    <script src="./aframe-resonance-audio-component/aframe-resonance-audio-component.js"></script>
+    <script src="./public/js/webmidi.min.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/aframe-randomizer-components@3.0.2/dist/aframe-randomizer-components.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/aframe-environment-component@1.3.7/dist/aframe-environment-component.min.js"></script>
+
+    
+    <script src="https://cdn.jsdelivr.net/npm/aframe-physics-system@4.0.1/dist/aframe-physics-system.min.js"></script>
+    
+    <script>
+  // Mirror Material component for A-Frame by Alfredo Consebola 2017.
+  //Taken from here https://codepen.io/dirkk0/pen/VwQNqWg
+  // https://github.com/alfa256/aframe-mirror-component/issues/4
+  // 
+  AFRAME.registerComponent('mirror', {
+    schema: {
+      resolution: {
+        type: 'number',
+        default: 128
+      },
+      refraction: {
+        type: 'number',
+        default: 0.95
+      },
+      color: {
+        type: 'color',
+        default: 0xffffff
+      },
+      distance: {
+        type: 'number',
+        default: 1000
+      },
+      interval: {
+        type: 'number',
+        default: 1000
+      },
+      repeat: {
+        type: 'boolean',
+        default: false
+      }
+    },
+    /**
+     * Set if component needs multiple instancing.
+     */
+    multiple: false,
+    init: function() {
+      this.counter = this.data.interval;
+      const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(this.data.resolution, {
+        format: THREE.RGBFormat,
+        generateMipmaps: true,
+        minFilter: THREE.LinearMipmapLinearFilter
+      });
+      this.cam = new THREE.CubeCamera(0.5, this.data.distance, cubeRenderTarget);
+      this.el.object3D.add(this.cam);
+      this.mirrorMaterial = new THREE.MeshBasicMaterial({
+        color: this.data.color,
+        refractionRatio: this.data.refraction,
+        envMap: this.cam.renderTarget.texture
+      });
+      this.done = false;
+      var mirrormat = this.mirrorMaterial;
+      this.mesh = this.el.getObject3D('mesh');
+      if (this.mesh) {
+        this.mesh.traverse(function(child) {
+          if (child instanceof THREE.Mesh) child.material = mirrormat;
+        });
+      }
+    },
+    tick: function(t, dt) {
+      if (!this.done) {
+        if (this.counter > 0) {
+          this.counter -= dt;
+        } else {
+          this.mesh = this.el.getObject3D('mesh');
+          if (this.mesh) {
+            this.mesh.visible = false;
+            let target = new THREE.Vector3();
+            this.el.object3D.getWorldPosition(target);
+            this.cam.position = target
+            // this.el.sceneEl.object3D.updateMatrixWorld()
+            this.cam.update(AFRAME.scenes[0].renderer, this.el.sceneEl.object3D);
+            var mirrormat = this.mirrorMaterial;
+            this.mesh.traverse(function(child) {
+              if (child instanceof THREE.Mesh) child.material = mirrormat;
+            });
+            this.mesh.visible = true;
+            if (!this.data.repeat) {
+              this.done = true;
+              this.counter = this.data.interval;
+            }
+          }
+        }
+      }
+    }
+  });
+</script>
+    
+    <script>
+      // Note the way we're establishing the NAF schema here; this is a bit awkward
+      // because of a recent bug found in the original handling. This mitigates that bug for now,
+      // until a refactor in the future that should fix the issue more cleanly.
+      // see issue https://github.com/networked-aframe/networked-aframe/issues/267
+
+      // This one is necessary, because tracking the .head child component's material's color
+      // won't happen unless we tell NAF to keep it in sync, like here.
+      NAF.schemas.getComponentsOriginal = NAF.schemas.getComponents;
+      NAF.schemas.getComponents = (template) => {
+        if (!NAF.schemas.hasTemplate("#avatar-template")) {
+          NAF.schemas.add({
+            template: "#avatar-template",
+            components: [
+              // position and rotation are added by default if we don't include a template, but since
+              // we also want to sync the color, we need to specify a custom template; if we didn't
+              // include position and rotation in this custom template, they'd not be synced.
+              "position",
+              "rotation",
+              "scale",
+
+              // this is how we sync a particular property of a particular component for a particular
+              // child element of template instances.
+              {
+                selector: ".head",
+                component: "material",
+                property: "color", // property is optional; if excluded, syncs everything in the component schema
+              },
+            ],
+          });
+        }
+        if (!NAF.schemas.hasTemplate("#bang-template")) {
+          NAF.schemas.add({
+            template: "#bang-template",
+            components: [
+              "position",
+              {
+                component: "bang",
+                property: "bang",
+              },
+            ],
+          });
+        }
+        if (!NAF.schemas.hasTemplate("#toggle-template")) {
+          NAF.schemas.add({
+            template: "#toggle-template",
+            components: [
+              "position",
+              {
+                component: "material",
+                property: "wireframe",
+              },
+              {
+                component: "toggle",
+                property: "toggle",
+              },
+            ],
+          });
+        }
+        if (!NAF.schemas.hasTemplate("#sld-template")) {
+          NAF.schemas.add({
+            template: "#sld-template",
+            components: [
+              "position",
+              {
+                component: "pdsld",
+                property: "value",
+              },
+            ],
+          });
+        }
+        if (!NAF.schemas.hasTemplate("#num-template")) {
+          NAF.schemas.add({
+            template: "#num-template",
+            components: [
+              "position",
+              {
+                component: "num",
+                property: "value",
+              },
+            ],
+          });
+        }
+        if (!NAF.schemas.hasTemplate("#sym-template")) {
+          NAF.schemas.add({
+            template: "#sym-template",
+            components: [
+              "position",
+              {
+                component: "sym",
+                property: "value",
+              },
+            ],
+          });
+        }
+        const components = NAF.schemas.getComponentsOriginal(template);
+        return components;
+      };
+    </script>
+    <script>
+      AFRAME.registerComponent("avatar-click", {
+        init: function () {
+          var el = this.el;
+
+          el.addEventListener("click", function () {
+            console.log("click");
+            const action = el.getAttribute('scale');
+            console.log('TTTT:', action.x*100);
+            //Module.pd.sendBang("tgl-r");
+            //Module.pd.sendFloat("vsl-r", 5.0);
+            vl = mapValue((action.x*100), 20, 50, 50, 10);
+            //vl += 10;
+            console.log('eeee:', vl);
+            Module.pd.sendFloat("vsl-r", vl);
+            Module.pd.sendBang("bng-r");
+          });
+        },
+      });
+    </script>
+    
+    <!-- CLICK LISTENER-->
+    <script>
+     
+      AFRAME.registerComponent('click-listener', {
+  init: function () {
+    this.el.addEventListener('click', evt => {
+      const action = this.el.getAttribute('data-action');
+      const valueDisplay = document.getElementById('valueDisplay');
+      let value = parseInt(valueDisplay.getAttribute('value'), 10);
+
+      if (action === 'increase') {
+        value += 10;
+      } else if (action === 'decrease') {
+        value = Math.max(0, value - 10);
+      }
+
+      valueDisplay.setAttribute('value', value);
+
+      // Update size of the local player's head only
+      const playerHead = document.querySelector('#player .head');
+      if (playerHead) {
+        let mappedValue = mapValue(value, 0, 140, 127, 0); //mapValue(value, 0, 140, 127, 0);
+        //Module.pd.sendFloat("vsl-r", mappedValue);
+      }
+
+      // Broadcast the change to all other connected clients
+      NAF.connection.broadcastData('headSizeChange', { value });
+
+      // Update local avatar size
+      updateAvatarSize(value);
+    });
+  }
+});
+
+// Function to update avatar size locally
+function updateAvatarSize(value) {
+  const scaleFactor = (value / 1000);
+
+  const head = document.querySelector('.avatar .head');
+  if (head) {
+    head.setAttribute('scale', `${0.2 + ((scaleFactor) * 2)} ${0.2 + ((scaleFactor) * 2)} ${0.2 + ((scaleFactor) * 2)}`);
+  }
+
+  const coll = document.querySelector('.avatar .collidable');
+  if (coll) {
+    coll.setAttribute('scale', `${0.2 + ((scaleFactor) * 2.5)} ${0.2 + ((scaleFactor) * 2.5)} ${0.2 + ((scaleFactor) * 2.5)}`);
+  }
+
+  const eye1 = document.querySelector('.avatar .eye1');
+  if (eye1) {
+    eye1.setAttribute('scale', `${(0.05 + ((scaleFactor) * 2) / 0.9)} ${(0.05 + ((scaleFactor) * 2) / 0.9)} ${(0.05 + ((scaleFactor) * 2) / 0.9)}`);
+    eye1.setAttribute('position', `0.07 ${0.1 + ((scaleFactor) * 2)} -0.1`);
+  }
+
+  const eye2 = document.querySelector('.avatar .eye2');
+  if (eye2) {
+    eye2.setAttribute('scale', `${(0.05 + ((scaleFactor) * 2) / 0.9)} ${(0.05 + ((scaleFactor) * 2) / 0.9)} ${(0.05 + ((scaleFactor) * 2) / 0.9)}`);
+    eye2.setAttribute('position', `-0.07 ${0.1 + ((scaleFactor) * 2)} -0.1`);
+  }
+}
+      
+AFRAME.registerComponent('networked-head-size', {
+  schema: {
+    default: 0
+  },
+  init: function () {
+    NAF.connection.subscribeToDataChannel('headSizeChange', (senderId, dataType, data, targetId) => {
+      this.updateHeadSize(data.value);
+    });
+  },
+  updateHeadSize: function (value) {
+    // Same update logic as updateAvatarSize function
+    const scaleFactor = (value / 1000);
+
+    const head = this.el.querySelector('.head');
+    if (head) {
+      head.setAttribute('scale', `${0.2 + ((scaleFactor) * 2)} ${0.2 + ((scaleFactor) * 2)} ${0.2 + ((scaleFactor) * 2)}`);
+    }
+
+    const coll = this.el.querySelector('.collidable');
+    if (coll) {
+      coll.setAttribute('scale', `${0.2 + ((scaleFactor) * 2.5)} ${0.2 + ((scaleFactor) * 2.5)} ${0.2 + ((scaleFactor) * 2.5)}`);
+    }
+
+    const eye1 = this.el.querySelector('.eye1');
+    if (eye1) {
+      eye1.setAttribute('scale', `${(0.05 + ((scaleFactor) * 2) / 0.9)} ${(0.05 + ((scaleFactor) * 2) / 0.9)} ${(0.05 + ((scaleFactor) * 2) / 0.9)}`);
+      eye1.setAttribute('position', `0.07 ${0.1 + ((scaleFactor) * 2)} -0.1`);
+    }
+
+    const eye2 = this.el.querySelector('.eye2');
+    if (eye2) {
+      eye2.setAttribute('scale', `${(0.05 + ((scaleFactor) * 2) / 0.9)} ${(0.05 + ((scaleFactor) * 2) / 0.9)} ${(0.05 + ((scaleFactor) * 2) / 0.9)}`);
+      eye2.setAttribute('position', `-0.07 ${0.1 + ((scaleFactor) * 2)} -0.1`);
+    }
+  }
+});
+      
+ /*     
+ AFRAME.registerComponent('log-intersection-l', {
+        init: function() {
+          this.el.addEventListener('raycaster-intersection', (evt) => {
+            evt.detail.els.forEach(el => {
+              //console.log('Intersected entity left ID:', el.id);
+              if(el.id == "other-left-hand"){
+                console.log('Intersected left entity ID:', el.id);
+                Module.pd.sendFloat("svl-s", 120); //120
+                Module.pd.sendBang("bangz-s");
+              }
+              
+              
+              
+            });
+          });
+        }
+      });
+      */
+      
+      /*
+      AFRAME.registerComponent('log-intersection-r', {
+        init: function() {
+          this.el.addEventListener('raycaster-intersection', (evt) => {
+            evt.detail.els.forEach(el => {
+              //console.log('Intersected right entity ID:', el.id);
+              if(el.id == "other-right-hand"){
+                console.log('Intersected right entity ID:', el.id);
+                Module.pd.sendFloat("svl-s", 80); //80
+                Module.pd.sendBang("bangz-s");
+              }
+              
+              
+            });
+          });
+        }
+      });
+      */
+      //////////////////////////////////
+      AFRAME.registerComponent('log-intersection-l', {
+    init: function() {
+      this.el.addEventListener('raycaster-intersection', (evt) => {
+        evt.detail.els.forEach(el => {
+          if (el.id === "other-left-hand") {
+            console.log('Intersected left entity ID:', el.id);
+            Module.pd.sendFloat("svl-s", 120);
+            Module.pd.sendBang("bangz-s");
+
+            // Broadcast the intersection event to all clients
+            NAF.connection.broadcastData('intersection-event', { targetId: el.id });
+          }
+        });
+      });
+
+      // Listen for intersection events from other clients
+      NAF.connection.subscribeToDataChannel('intersection-event', this.handleIntersectionEvent.bind(this));
+    },
+    handleIntersectionEvent: function(senderId, dataType, data) {
+      if (dataType === 'intersection-event' && data.targetId === 'other-left-hand') {
+        console.log('Received intersection event for left entity ID:', data.targetId);
+        Module.pd.sendFloat("svl-s", 120);
+        Module.pd.sendBang("bangz-s");
+      }
+    }
+  });
+      
+      
+      AFRAME.registerComponent('log-intersection-r', {
+    init: function() {
+      this.el.addEventListener('raycaster-intersection', (evt) => {
+        evt.detail.els.forEach(el => {
+          if (el.id === "other-right-hand") {
+            console.log('Intersected right entity ID:', el.id);
+            Module.pd.sendFloat("svl-s", 80);
+            Module.pd.sendBang("bangz-s");
+
+            // Broadcast the intersection event to all clients
+            NAF.connection.broadcastData('intersection-event', { targetId: el.id });
+          }
+        });
+      });
+
+      // Listen for intersection events from other clients
+      NAF.connection.subscribeToDataChannel('intersection-event', this.handleIntersectionEvent.bind(this));
+    },
+    handleIntersectionEvent: function(senderId, dataType, data) {
+      if (dataType === 'intersection-event' && data.targetId === 'other-right-hand') {
+        console.log('Received intersection event for right entity ID:', data.targetId);
+        Module.pd.sendFloat("svl-s", 80);
+        Module.pd.sendBang("bangz-s");
+      }
+    }
+  });
+      
+     ///////////////////////////////
+      AFRAME.registerComponent('raycast-listener', {
+        init: function () {
+          var el = this.el;
+          el.addEventListener('raycaster-intersection', function (evt) {
+            // Get the first intersected element
+            var intersectedEl = evt.detail.intersections[0].object.el;
+            // Get the size of the intersected element
+            var size = intersectedEl.getAttribute('id');
+            console.log('Size:', size);
+          });
+        }
+      });
+    
+      AFRAME.registerComponent('list', {
+  init: function () {
+    this.el.addEventListener('click', evt => {
+      const action = this.el.getAttribute('scale');
+      console.log('SSS:', action.x*100);
+      
+      //let mappedValue = mapValue((action.x*100)+10, 0, 100, 127, 80); //mapValue(value, 0, 140, 127, 0);
+      //console.log('ZZZ:', mappedValue)
+      //Module.pd.sendFloat("vsl-r", mappedValue);
+      //Module.pd.sendBang("bng-r");
+      
+      /*
+      const valueDisplay = document.getElementById('valueDisplay');
+      let value = parseInt(valueDisplay.getAttribute('value'), 10);
+
+      if (action === 'increase') {
+        value += 10;
+      } else if (action === 'decrease') {
+        value = Math.max(0, value - 10);
+      }
+
+      valueDisplay.setAttribute('value', value);
+
+      // Update size of the local player's head only
+      const playerHead = document.querySelector('#player .head');
+      if (playerHead) {
+        let mappedValue = mapValue(value, 0, 140, 127, 0); //mapValue(value, 0, 140, 127, 0);
+        Module.pd.sendFloat("vsl-r", mappedValue);
+      }
+
+      // Broadcast the change to all other connected clients
+      NAF.connection.broadcastData('headSizeChange', { value });
+
+      // Update local avatar size
+      updateAvatarSize(value);
+      */
+    });
+  }
+});
+
+    </script>
+    
+  
+    
+  </head>
+  <body>
+    <script src="a-pdxr.js"></script>
+
+    <a-scene
+             physics="debug: true" 
+      networked-scene="
+      room: basic;
+      debug: true;
+      adapter: wseasyrtc;
+      audio: false; 
+    "
+    >
+      <!--wseasyrtc-->
+      
+      <!--->
+    <!-- Panel -->
+     <!-- 3D Menu Panel -->
+      <!--
+      <a-entity id="panel" position="0 1.6 -1">
+        
+        <a-box id="increaseButton" position="-0.5 0.5 0" depth="0.2" height="0.4" width="0.8" color="green" class="collidable" data-action="increase" click-listener></a-box>
+        <a-text value="Increase" position="-0.5 0.5 0.3" align="center"></a-text>
+        
+        <a-box id="decreaseButton" position="0.5 0.5 0" depth="0.2" height="0.4" width="0.8" color="red" class="collidable" data-action="decrease" click-listener></a-box>
+        <a-text value="Decrease" position="0.5 0.5 0.3" align="center"></a-text>
+        
+        <a-text id="valueDisplay" value="0" position="0 1 0.2" align="center"></a-text>
+        
+      </a-entity>
+      -->
+      
+      
+  
+      
+      <a-assets>
+        <!-- Templates -->
+        <!-- Camera Rig / Player -->
+        <template id="rig-template">
+          <a-entity></a-entity>
+        </template>
+        
+       
+
+        <!-- Head / Avatar -->
+
+        <template id="avatar-template">
+          <a-entity class="avatar" scale="1 1 1" networked-head-size>                   
+            <a-entity geometry="primitive: sphere" class="head" scale="0.2 0.2 0.2" avatar-click random-color networked-head-size></a-entity>
+            <a-entity geometry="primitive: sphere" class="collidable" scale="0.2 0.2 0.2" avatar-click networked-head-size list></a-entity>
+            <a-entity class="face" position="0 0.05 0">
+              <a-entity geometry="primitive: sphere" class="eye1" material="color: white" position="0.07 0.1 -0.1" scale="0.05 0.05 0.05" networked-head-size>
+              <a-entity geometry="primitive: sphere" class="pupil1" material="color: black" position="0 0 -1" scale="0.2 0.2 0.2" networked-head-size></a-entity>
+              </a-entity>
+              <a-entity geometry="primitive: sphere" class="eye2" material="color: white" position="-0.07 0.1 -0.1" scale="0.05 0.05 0.05" networked-head-size>
+              <a-entity geometry="primitive: sphere" class="pupil2" material="color: black" position="0 0 -1" scale="0.2 0.2 0.2" networked-head-size></a-entity>
+              
+                </a-entity>
+              
+              </a-entity>
+            </a-entity>
+        </template>
+
+
+  
+        
+
+        <!-- 
+
+             Templates of PD GUI Objects
+
+             change visual appearance here.  
+
+        -->
+
+        <template id="bang-template">
+          <a-entity
+            class="collidable"
+            geometry="primitive: box"
+            material="wireframe: false; color: white"
+            bang
+            animation="property: material.color; from: #FFFFFF; to: #000000; dur: 50; dir: reverse; startEvents: pdbng_glow"
+            animation__2="property: bang.bang;from: 1; to: 0; delay: 50; dur: 1; startEvents: pdbng_false"
+          >
+          </a-entity>
+        </template>
+        <template id="num-template">
+          <a-entity
+            geometry="primitive: box"
+            material="wireframe: true; color: white"
+            num
+          >
+          </a-entity>
+        </template>
+        <template id="sym-template">
+          <a-entity
+            geometry="primitive: box"
+            material="wireframe: true; color: white"
+            sym
+          >
+          </a-entity>
+        </template>
+        <template id="toggle-template">
+          <a-entity
+            class="collidable"
+            geometry="primitive: box"
+            material="wireframe: true; color: white"
+            toggle
+          >
+          </a-entity>
+        </template>
+        <template id="sld-template">
+          <a-entity
+            geometry="primitive: box; height:4"
+            material="wireframe:true"
+            scale="0.5 0.5 0.5"
+          >
+            <a-entity
+              class="collidable"
+              geometry="primitive: box; height:0.5"
+              material="wireframe:false"
+              position="0 2.25 0"
+              slideup
+              animation="property:material.color; from: #FFFFFF; to: #000000; dur:50; dir:reverse; startEvents: pdsldup_glow"
+            ></a-entity>
+            <a-entity
+              geometry="primitive: box; height:0.1"
+              material="wireframe:false"
+              position="0 0 0"
+              slider
+            ></a-entity>
+            <a-entity
+              class="collidable"
+              geometry="primitive: box; height:0.5"
+              material="wireframe:false"
+              position="0 -2.25 0"
+              slidedwn
+              animation="property:material.color; from: #FFFFFF; to: #000000; dur:50; dir:reverse; startEvents: pdslddwn_glow"
+            ></a-entity>
+          </a-entity>
+        </template>
+        
+        
+        <!--hand collider-->
+        <a-assets>
+          <template id="right-hand">
+            <a-entity>
+              <a-sphere color="#f00" scale="0.1 0.1 0.1" class="collidable" id="other-right-hand" visible="false"></a-sphere>
+            </a-entity>
+          </template>
+        </a-assets>
+        
+        <a-assets>
+          <template id="left-hand">
+            <a-entity>
+              <a-sphere color="#ff0" scale="0.1 0.1 0.1" class="collidable" id="other-left-hand" visible="false"></a-sphere>
+            </a-entity>
+          </template>
+        </a-assets>
+        
+        
+      </a-assets>
+
+      <a-resonance-audio-room
+        position="0 2.5 0"
+        width="20"
+        height="3"
+        depth="10"
+        ambisonic-order="3"
+        speed-of-sound="343"
+        left="brick-bare"
+        right="brick-bare"
+        front="brick-bare"
+        back="brick-bare"
+        down="parquet-on-concrete"
+        up="acoustic-ceiling-tiles"
+        visualize="false"
+      >
+      </a-resonance-audio-room>
+
+      <a-entity environment="preset:default;" hide-on-enter-ar></a-entity>
+
+      <a-entity light="type:ambient;intensity:0.5"></a-entity>
+      
+    
+
+      <a-entity
+        id="player"
+        networked="template:#rig-template;"
+        movement-controls
+        cursor="rayOrigin:mouse;"
+        raycaster="objects: .collidable"
+                raycast-listener
+                
+      >
+        
+      
+        
+        <a-entity
+          id="player2"
+          camera
+          position="0 1.6 0"
+          look-controls
+          wasd-controls
+          networked="template:#avatar-template;"
+          visible="true"
+                  
+        >
+          
+          
+           
+          
+        </a-entity>
+        
+        <script>
+        AFRAME.registerComponent('toggle-cube-visibility', {
+          init: function () {
+            var el = this.el;
+            var cube = document.getElementById('panel');
+
+            el.addEventListener('gripdown', function () {
+              cube.setAttribute('visible', !cube.getAttribute('visible'));
+              console.log("asadd");
+            });
+          }
+        });
+
+        //document.querySelector('#my-tracked-right-hand').setAttribute('toggle-cube-visibility', '');
+        </script>
+        
+        <a-entity
+          id="my-tracked-left-hand"
+          networked="template:#left-hand-default-template"
+          laser-controls="hand: left"
+          raycaster="objects: .collidable"
+                  log-intersection-r
+                  log-intersection-l
+                  toggle-cube-visibility
+        >
+        <a-entity networked="template: #left-hand"></a-entity>
+          <!--<a-box id="toggle-cube" position="0 0 -0.5" scale="0.1 0.1 0.1" visible="false"></a-box>-->
+          <!-- 3D Menu Panel -->
+      <a-entity id="panel" visible="false" geometry="primitive: box; height:0.1; color: red"
+              
+              position="0 0 -0.240" scale="0.2 0.38 0.19">
+        
+        <!-- Increase Button -->
+        <a-box id="increaseButton" position="-0.19 0.062 0.072" color="green" class="collidable" data-action="increase" click-listener rotation="0 0 0" scale="0.380 0.060 0.58"></a-box>
+        <a-text value="+" position="-0.169 0.1 0.08" scale="2 2 2" rotation="-90 0 0" align="center"></a-text>
+        
+        <!-- Decrease Button -->
+        <a-box id="decreaseButton" position="0.19 0.062 0.072" color="red" class="collidable" data-action="decrease" click-listener rotation="0 0 0" scale="0.380 0.060 0.58"></a-box>
+        <a-text value="-" position="0.169 0.1 0.08" scale="2 2 2" rotation="-90 0 0" align="center"></a-text>
+        
+        <!-- Value Display -->
+        <a-text id="valueDisplay" value="0" position="-0.008 0.05 -0.363" scale="0.7 0.7 0.7" rotation="-90 0 0" align="center" color="black"></a-text>
+        
+        <a-entity geometry="primitive: plane; segments-height:5; segments-width: 5;" color="green" position="0 0.430 -2.620" rotation="-45 0 0" scale="3 2 2" mirror="repeat: true; resolution: 512; interval: 10;">
+    </a-entity>
+        
+      </a-entity>
+          
+          
+          <!--<a-box visible="true" scale="0.1 0.1 0.1" class="cursor-listener"
+        cursor-listener></a-box>-->
+
+        
+        </a-entity>
+        
+        
+        
+        
+        <a-entity
+          id="my-tracked-right-hand"
+          networked="template:#right-hand-default-template"
+          laser-controls="hand: right"
+          raycaster="objects: .collidable"
+          log-intersection-l
+          log-intersection-r
+            
+                  
+        >
+          <a-entity networked="template: #right-hand"></a-entity>
+          
+
+          <!--<a-entity raycaster="showLine: true" position="0 -0.9 0" rotation="0 0 0" foo></a-entity>-->
+        <!--<a-box visible="true" scale="0.1 0.1 0.1" class="cursor-listener"
+        cursor-listener ></a-box>-->
+          
+        </a-entity>
+        
+      </a-entity>
+      
+      
+      
+    <a-entity id="resizableSphere" geometry="primitive: sphere" position="0 1 0" scale="0.1 0.1 0.1" resize-box="entityId: resizableSphere" visible="false"></a-entity>
+     
+      <a-plane height="10" width="10" rotation="0 0 0" scale="3 2 2" position="5 0 -5" color="#242424"></a-plane>
+      <a-plane height="10" width="10" rotation="0 -90 0" scale="3 2 2" position="15 0 5" color="#242424"></a-plane>
+      <a-plane height="10" width="10" rotation="0 90 0" scale="3 2 2" position="-10 0 5" color="#242424"></a-plane>
+      <a-plane height="10" width="10" rotation="0 180 0" scale="3 2 2" position="5 0 20" color="#242424"></a-plane>
+      <a-plane height="100" width="100" rotation="-90 0 0" scale="3 2 2" position="0 0.06 0" color="#242424"></a-plane>
+      
+      <!--marimab04.pd-->
+      <a-pdxr visualize="false" src="default.pd" position="0 1 -10"></a-pdxr>
+      
+    
+   
+    </a-scene>
+    <svg id="canvas" hidden></svg>
+    
+   <script>
+    function mapValue(value, fromLow, fromHigh, toLow, toHigh) {
+  // Check if the value is within the input range
+  if (value < fromLow || value > fromHigh) {
+    throw new Error('Value is out of input range');
+  }
+
+  // Calculate the ratio of the input value relative to the input range
+  let ratio = (value - fromLow) / (fromHigh - fromLow);
+
+  // Map the ratio to the output range and return the mapped value
+  return toLow + ratio * (toHigh - toLow);
+}
+    </script>
+    
+    <script>
+      // Called by Networked-Aframe when connected to server
+      // Optional to use; this API will change in the future
+      function onConnect() {
+        console.log("onConnect", new Date());
+      }
+    </script>
+    
+    <script>
+      
+      </script>
+    
+    
+      
+  </body>
+</html>
