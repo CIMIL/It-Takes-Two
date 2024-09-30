@@ -13,7 +13,7 @@ Run each of them in a [Networked-Aframe](https://github.com/networked-aframe/net
 
 [Sonification Instrument](https://sonification-instrument.glitch.me/)
 
-[Body Instrument](https://body-instrument.glitch.me/)
+[Body Instrument](https://body-instrument-01.glitch.me/)
 
 
 ## Credits
